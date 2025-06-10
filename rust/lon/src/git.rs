@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
+use regex::Regex;
 use tempfile::TempDir;
 
 #[derive(Clone, Debug)]
@@ -127,6 +128,34 @@ fn find_newest_revision_for_ref(url: &str, reference: &str) -> Result<Revision> 
     }
 
     Ok(Revision(references.remove(0).revision))
+}
+
+/// Find the default branch for a git repository
+pub fn find_default_branch(url: &str) -> Result<String> {
+    let output = Command::new("git")
+        .arg("ls-remote")
+        .args(["--symref", url, "HEAD"])
+        .output()
+        .context("Failed to execute git ls-remote. Most likely it's not on PATH")?;
+
+    if !output.status.success() {
+        bail!(
+            "Failed to find the default branch for {}\n{}",
+            url,
+            String::from_utf8_lossy(&output.stderr)
+        )
+    }
+
+    let re = Regex::new(r"ref:.*refs/heads/(?<branch>.*)\tHEAD")?;
+
+    let Some(branch) = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .find_map(|x| re.captures(x).map(|matched| matched["branch"].into()))
+    else {
+        bail!("Failed to find the default branch for {url}",)
+    };
+
+    Ok(branch)
 }
 
 /// Call `git ls-remote` with the provided args.

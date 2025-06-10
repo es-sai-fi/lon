@@ -39,7 +39,7 @@ impl Convertible for LockFile {
                 let source = GitHubSource::new(
                     owner,
                     &package.repo,
-                    &package.branch,
+                    Some(&package.branch),
                     Some(&package.rev),
                     false,
                 )?;
@@ -48,7 +48,7 @@ impl Convertible for LockFile {
             } else {
                 let source = GitSource::new(
                     &package.repo,
-                    &package.branch,
+                    Some(&package.branch),
                     Some(&package.rev),
                     false,
                     false,

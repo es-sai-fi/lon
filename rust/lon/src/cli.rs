@@ -105,7 +105,7 @@ struct AddGitArgs {
     /// URL to the repository
     url: String,
     /// Branch to track
-    branch: String,
+    branch: Option<String>,
     /// Revision to lock
     #[arg(short, long)]
     revision: Option<String>,
@@ -122,7 +122,7 @@ struct AddGitHubArgs {
     /// An identifier made up of {owner}/{repo}, e.g. nixos/nixpkgs
     identifier: String,
     /// Branch to track
-    branch: String,
+    branch: Option<String>,
     /// Name of the source
     ///
     /// If you do not supply this, the repository name is used as the source name.
@@ -283,7 +283,7 @@ fn add_git(directory: impl AsRef<Path>, args: &AddGitArgs) -> Result<()> {
 
     let source = GitSource::new(
         &args.url,
-        &args.branch,
+        args.branch.as_ref(),
         args.revision.as_ref(),
         args.submodules,
         args.frozen,
@@ -314,7 +314,7 @@ fn add_github(directory: impl AsRef<Path>, args: &AddGitHubArgs) -> Result<()> {
     let source = GitHubSource::new(
         owner,
         repo,
-        &args.branch,
+        args.branch.as_ref(),
         args.revision.as_ref(),
         args.frozen,
     )?;

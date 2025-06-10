@@ -14,6 +14,7 @@ sha2 = "0.10.9"
 tempfile = "3.20.0"
 reqwest = { version = "0.12", default-features = false, features = ["blocking","http2","rustls-tls","json"] }
 nix-compat = { git = "https://git.snix.dev/snix/snix", default-features = false }
+regex = "1.11.1"
 
 [dev-dependencies]
 expect-test = "1.5.1"
