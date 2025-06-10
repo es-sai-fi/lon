@@ -1,0 +1,86 @@
+{
+  "pins": {
+    "agenix": {
+      "type": "GitRelease",
+      "repository": {
+        "type": "GitHub",
+        "owner": "ryantm",
+        "repo": "agenix"
+      },
+      "pre_releases": false,
+      "version_upper_bound": null,
+      "release_prefix": null,
+      "submodules": false,
+      "version": "0.15.0",
+      "revision": "564595d0ad4be7277e07fa63b5a991b3c645655d",
+      "url": "https://api.github.com/repos/ryantm/agenix/tarball/refs/tags/0.15.0",
+      "hash": "sha256-ipqShkBmHKC9ft1ZAsA6aeKps32k7+XZSPwfxeHLsAU="
+    },
+    "arkheon": {
+      "type": "Git",
+      "repository": {
+        "type": "GitHub",
+        "owner": "RaitoBezarius",
+        "repo": "arkheon"
+      },
+      "branch": "main",
+      "submodules": false,
+      "revision": "3eea876b29217d01cf2ef03ea9fdd8779d28ad04",
+      "url": "https://github.com/RaitoBezarius/arkheon/archive/3eea876b29217d01cf2ef03ea9fdd8779d28ad04.tar.gz",
+      "hash": "sha256-+R6MhTXuSzNeGQiL4DQwlP5yNhmnhbf7pQWPUWgcZSM="
+    },
+    "colmena": {
+      "type": "Git",
+      "repository": {
+        "type": "Git",
+        "url": "https://git.dgnum.eu/DGNum/colmena"
+      },
+      "branch": "main",
+      "submodules": false,
+      "revision": "b5135dc8af1d7637b337cc2632990400221da577",
+      "url": null,
+      "hash": "sha256-7gg+K3PEYlN0sGPgDlmnM8zgDDIV505gNcwjFN61Qvk="
+    },
+    "nix-actions": {
+      "type": "GitRelease",
+      "repository": {
+        "type": "Git",
+        "url": "https://git.dgnum.eu/DGNum/nix-actions.git"
+      },
+      "pre_releases": false,
+      "version_upper_bound": null,
+      "release_prefix": null,
+      "submodules": false,
+      "version": "v0.5.1",
+      "revision": "06847b3256df402da0475dccb290832ec92a9f8c",
+      "url": null,
+      "hash": "sha256-2xOZdKiUfcriQFKG37vY96dgCJLndhLa7cGacq8+SA8="
+    },
+    "nixos-25.05": {
+      "type": "Channel",
+      "name": "nixos-25.05",
+      "url": "https://releases.nixos.org/nixos/25.05/nixos-25.05.803579.70c74b02eac4/nixexprs.tar.xz",
+      "hash": "sha256-0RxtgAd4gHYPFFwICal8k8hvJBOkCeTjFkh4HsqYDbE="
+    },
+    "nixos-unstable": {
+      "type": "Channel",
+      "name": "nixos-unstable",
+      "url": "https://releases.nixos.org/nixos/unstable/nixos-25.05pre797896.d89fc19e405c/nixexprs.tar.xz",
+      "hash": "sha256-bFJJ/qwB3VJ0nFuVYYHJXinT4tNJ2jhXTVT6SpYiFOM="
+    },
+    "wp4nix": {
+      "type": "Git",
+      "repository": {
+        "type": "GitLab",
+        "repo_path": "helsinki-systems/wp4nix",
+        "server": "https://git.helsinki.tools/"
+      },
+      "branch": "master",
+      "submodules": false,
+      "revision": "2fc9a0734168cab536e3129efa6397d6cd3ac89f",
+      "url": "https://git.helsinki.tools/api/v4/projects/helsinki-systems%2Fwp4nix/repository/archive.tar.gz?sha=2fc9a0734168cab536e3129efa6397d6cd3ac89f",
+      "hash": "sha256-abwqAZGsWuWqfxou8XlqedBvXsUw1/xanSgljLCJxdM="
+    }
+  },
+  "version": 6
+}
