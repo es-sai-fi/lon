@@ -3,6 +3,11 @@
 ## 0.8.0 (unreleased)
 
 - Fixed `update --commit` when supplying a directory via `-d`.
+- Removed the need to provide a branch when adding a new source. When no
+  explict branch is now provided, the default branch is determined from the Git
+  repository.
+- Added the ability to initalize from a Npins `sources.json`. This only
+  converts `Git`, `GitRelease`, and `Channel` Pins.
 
 ## 0.7.0
 
