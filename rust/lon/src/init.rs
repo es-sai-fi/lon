@@ -1,4 +1,5 @@
 pub mod niv;
+pub mod npins;
 
 use anyhow::Result;
 

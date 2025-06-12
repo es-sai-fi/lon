@@ -11,7 +11,7 @@ use crate::{
     bot::{Forge, Forgejo, GitHub, GitLab},
     commit_message::CommitMessage,
     git,
-    init::{Convertible, niv},
+    init::{Convertible, niv, npins},
     lock::Lock,
     lon_nix::LonNix,
     sources::{GitHubSource, GitSource, Source, Sources},
@@ -82,6 +82,7 @@ struct InitArgs {
 #[derive(Clone, ValueEnum)]
 enum LockFileType {
     Niv,
+    Npins,
 }
 
 #[derive(Subcommand)]
@@ -261,13 +262,13 @@ fn init(directory: impl AsRef<Path>, args: &InitArgs) -> Result<()> {
         bail!("No lock file type is provided");
     };
 
-    let lock_file = match lock_file_type {
-        LockFileType::Niv => niv::LockFile::from_file(path)?,
-    };
-
     log::info!("Initializing lon.lock from {path:?}");
 
-    let sources = lock_file.convert()?;
+    let sources = match lock_file_type {
+        LockFileType::Niv => niv::LockFile::from_file(path)?.convert()?,
+        LockFileType::Npins => npins::LockFile::from_file(path)?.convert()?,
+    };
+
     sources.write(&directory)?;
 
     Ok(())
