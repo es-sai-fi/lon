@@ -33,9 +33,10 @@ impl Lock {
     }
 
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self> {
-        let file = File::open(path.as_ref())
-            .with_context(|| format!("Failed to open {:?}", path.as_ref()))?;
-        serde_json::from_reader(file).context("Failed to deserialize lock file")
+        let lock_json = std::fs::read_to_string(path.as_ref())
+            .with_context(|| format!("Failed to read {:?}", path.as_ref()))?;
+
+        serde_json::from_str(&lock_json).context("Failed to deserialize lock file")
     }
 
     pub fn to_file(&self, path: impl AsRef<Path>) -> Result<()> {
@@ -59,40 +60,7 @@ mod tests {
 
     #[test]
     fn parse_lock() -> Result<()> {
-        let value = serde_json::json!({
-            "version": "1",
-            "sources": {
-                "nixpkgs": {
-                    "type": "GitHub",
-                    "fetchType": "tarball",
-                    "owner": "nixos",
-                    "repo": "nixpkgs",
-                    "revision": "a9858885e197f984d92d7fe64e9fff6b2e488d40",
-                    "branch": "master",
-                    "url": "https://github.com/nixos/nixpkgs/archive/a9858885e197f984d92d7fe64e9fff6b2e488d40.tar.gz",
-                    "hash": "sha256-h1zQVhXuYoKTgJWqgVa7veoCJlbuG+xyzLQAar1Np5Y="
-                },
-                "lanzaboote": {
-                    "type": "Git",
-                    "fetchType": "git",
-                    "branch": "master",
-                    "revision": "f5a3a7dff44d131807fc1a89fbd8576cd870334a",
-                    "url": "git@github.com:nix-community/lanzaboote.git",
-                    "hash": "sha256-e/fSi0WER06N8WCvpht62fkGtWfe5ckDxr6zNYkwkFw=",
-                    "lastModified": 1_722_329_086
-                },
-                "lanzaboote-2": {
-                    "type": "Git",
-                    "fetchType": "git",
-                    "branch": "master",
-                    "revision": "f5a3a7dff44d131807fc1a89fbd8576cd870334a",
-                    "url": "git@github.com:nix-community/lanzaboote.git",
-                    "hash": "sha256-e/fSi0WER06N8WCvpht62fkGtWfe5ckDxr6zNYkwkFw="
-                },
-            }
-        });
-
-        serde_json::from_value::<Lock>(value)?;
+        serde_json::from_str::<Lock>(include_str!("../tests/lon.lock"))?;
         Ok(())
     }
 }

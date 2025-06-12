@@ -1,0 +1,34 @@
+{
+  "version": "1",
+  "sources": {
+    "lanzaboote": {
+      "type": "Git",
+      "fetchType": "git",
+      "branch": "master",
+      "revision": "f5a3a7dff44d131807fc1a89fbd8576cd870334a",
+      "url": "git@github.com:nix-community/lanzaboote.git",
+      "hash": "sha256-e/fSi0WER06N8WCvpht62fkGtWfe5ckDxr6zNYkwkFw=",
+      "lastModified": 1722329086,
+      "submodules": false
+    },
+    "lanzaboote-2": {
+      "type": "Git",
+      "fetchType": "git",
+      "branch": "master",
+      "revision": "f5a3a7dff44d131807fc1a89fbd8576cd870334a",
+      "url": "git@github.com:nix-community/lanzaboote.git",
+      "hash": "sha256-e/fSi0WER06N8WCvpht62fkGtWfe5ckDxr6zNYkwkFw=",
+      "submodules": false
+    },
+    "nixpkgs": {
+      "type": "GitHub",
+      "fetchType": "tarball",
+      "owner": "nixos",
+      "repo": "nixpkgs",
+      "branch": "master",
+      "revision": "a9858885e197f984d92d7fe64e9fff6b2e488d40",
+      "url": "https://github.com/nixos/nixpkgs/archive/a9858885e197f984d92d7fe64e9fff6b2e488d40.tar.gz",
+      "hash": "sha256-h1zQVhXuYoKTgJWqgVa7veoCJlbuG+xyzLQAar1Np5Y="
+    }
+  }
+}

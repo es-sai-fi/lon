@@ -1,12 +1,12 @@
 use std::{collections::BTreeMap, path::Path};
 
 use anyhow::{Context, Result};
+use nix_compat::nixhash::NixHash;
 
 use crate::{
     git::{self, RevList, Revision},
     http::GitHubRepoApi,
-    lock,
-    nix::{self, SriHash},
+    lock, nix,
 };
 
 const GITHUB_URL: &str = "https://github.com";
@@ -158,7 +158,7 @@ pub struct GitSource {
     url: String,
     branch: String,
     revision: Revision,
-    hash: SriHash,
+    hash: NixHash,
     last_modified: Option<u64>,
 
     /// Whether to fetch submodules
@@ -261,7 +261,7 @@ impl GitSource {
     }
 
     /// Computing the hash for this source type.
-    fn compute_hash(url: &str, revision: &str, submodules: bool) -> Result<SriHash> {
+    fn compute_hash(url: &str, revision: &str, submodules: bool) -> Result<NixHash> {
         nix::prefetch_git(url, revision, submodules)
             .with_context(|| format!("Failed to compute hash for {url}@{revision}"))
     }
@@ -274,7 +274,7 @@ pub struct GitHubSource {
     branch: String,
     revision: Revision,
     url: String,
-    hash: SriHash,
+    hash: NixHash,
 
     frozen: bool,
 }
@@ -369,7 +369,7 @@ impl GitHubSource {
     }
 
     /// Compute the hash for this source type.
-    fn compute_hash(url: &str) -> Result<SriHash> {
+    fn compute_hash(url: &str) -> Result<NixHash> {
         nix::prefetch_tarball(url).with_context(|| format!("Failed to compute hash for {url}"))
     }
 
@@ -505,28 +505,13 @@ mod tests {
     /// Parsing to internal representation and converting it back produces the same representation.
     #[test]
     fn parse_and_convert() -> Result<()> {
-        let value = serde_json::json!({
-            "version": "1",
-            "sources": {
-                "nixpkgs": {
-                    "type": "GitHub",
-                    "fetchType": "tarball",
-                    "owner": "nixos",
-                    "repo": "nixpkgs",
-                    "revision": "a9858885e197f984d92d7fe64e9fff6b2e488d40",
-                    "branch": "master",
-                    "url": "https://github.com/nixos/nixpkgs/archive/a9858885e197f984d92d7fe64e9fff6b2e488d40.tar.gz",
-                    "hash": "sha256-h1zQVhXuYoKTgJWqgVa7veoCJlbuG+xyzLQAar1Np5Y="
-                }
-            }
-        });
-
-        let lock = serde_json::from_value::<lock::v1::Lock>(value.clone())?;
+        let lock_json = include_str!("../tests/lon.lock");
+        let lock = serde_json::from_str::<lock::v1::Lock>(lock_json)?;
         let sources = Sources::from(lock);
         let latest_lock = sources.into_latest_lock();
-        let latest_value = serde_json::to_value(latest_lock)?;
+        let latest_lock_json = serde_json::to_string_pretty(&latest_lock)?;
 
-        assert_eq!(value, latest_value);
+        assert_eq!(lock_json, latest_lock_json);
 
         Ok(())
     }

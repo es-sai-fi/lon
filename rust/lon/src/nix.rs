@@ -1,51 +1,19 @@
-use std::{fmt, process::Command};
+use std::process::Command;
 
 use anyhow::{Context, Result, bail};
-use serde::{Deserialize, Serialize};
-
-/// A SRI hash.
-#[derive(Deserialize, Serialize, Clone)]
-pub struct SriHash(String);
-
-impl SriHash {
-    /// Convert a Nix Bas32 hash to a Sha256 SRI hash.
-    fn from_nix_base_32(nix_base32_hash: &str) -> Result<Self> {
-        let output = Command::new("nix-hash")
-            .arg("--type")
-            .arg("sha256")
-            .arg("--to-sri")
-            .arg(nix_base32_hash)
-            .output()
-            .context("Failed to execute nix-hash. Most likely it's not on PATH")?;
-
-        if !output.status.success() {
-            bail!(
-                "Failed to derive the SHA 256 SRI format of {nix_base32_hash}\n{}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        Ok(Self(String::from(stdout.trim())))
-    }
-}
-
-impl fmt::Display for SriHash {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
+use nix_compat::nixhash::{HashAlgo, NixHash};
+use serde::Deserialize;
 
 #[derive(Deserialize)]
 struct NixPrefetchGitResponse {
-    sha256: String,
+    hash: NixHash,
 }
 
 /// Fetch a git source and calculate its hash.
 ///
 /// Uses the same store path (via `--name source`) as `builtins.fetchGit` to download the
 /// source only once.
-pub fn prefetch_git(url: &str, revision: &str, submodules: bool) -> Result<SriHash> {
+pub fn prefetch_git(url: &str, revision: &str, submodules: bool) -> Result<NixHash> {
     let mut command = Command::new("nix-prefetch-git");
     if submodules {
         command.arg("--fetch-submodules");
@@ -68,14 +36,14 @@ pub fn prefetch_git(url: &str, revision: &str, submodules: bool) -> Result<SriHa
     let response: NixPrefetchGitResponse = serde_json::from_slice(&output.stdout)
         .context("Failed to deserialize nix-prefetch-git JSON response")?;
 
-    SriHash::from_nix_base_32(&response.sha256)
+    Ok(response.hash)
 }
 
 /// Fetch a tarball and calculate its hash.
 ///
 /// Uses the same store path (via `--name source`) as `builtins.fetchTarball` to download the
 /// source only once.
-pub fn prefetch_tarball(url: &str) -> Result<SriHash> {
+pub fn prefetch_tarball(url: &str) -> Result<NixHash> {
     let output = Command::new("nix-prefetch-url")
         .arg("--unpack")
         .arg("--name")
@@ -93,6 +61,6 @@ pub fn prefetch_tarball(url: &str) -> Result<SriHash> {
         );
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    SriHash::from_nix_base_32(stdout.trim())
+    let stdout = String::from_utf8(output.stdout)?;
+    Ok(NixHash::from_str(stdout.trim(), Some(HashAlgo::Sha256))?)
 }

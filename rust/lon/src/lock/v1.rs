@@ -1,8 +1,7 @@
 use std::collections::BTreeMap;
 
+use nix_compat::nixhash::NixHash;
 use serde::{Deserialize, Serialize};
-
-use crate::nix::SriHash;
 
 #[derive(Deserialize, Serialize)]
 pub struct Lock {
@@ -34,7 +33,7 @@ pub struct GitSource {
     pub branch: String,
     pub revision: String,
     pub url: String,
-    pub hash: SriHash,
+    pub hash: NixHash,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_modified: Option<u64>,
     /// Whether to fetch submodules
@@ -54,5 +53,5 @@ pub struct GitHubSource {
     pub branch: String,
     pub revision: String,
     pub url: String,
-    pub hash: SriHash,
+    pub hash: NixHash,
 }
