@@ -170,11 +170,16 @@ pub struct GitSource {
 impl GitSource {
     pub fn new(
         url: &str,
-        branch: &str,
+        branch: Option<&String>,
         revision: Option<&String>,
         submodules: bool,
         frozen: bool,
     ) -> Result<Self> {
+        let branch = match branch {
+            Some(branch) => branch,
+            None => &git::find_default_branch(url)?,
+        };
+
         let rev = match revision {
             Some(rev) => rev,
             None => &git::find_newest_revision(url, branch)?.to_string(),
@@ -283,13 +288,20 @@ impl GitHubSource {
     pub fn new(
         owner: &str,
         repo: &str,
-        branch: &str,
+        branch: Option<&String>,
         revision: Option<&String>,
         frozen: bool,
     ) -> Result<Self> {
+        let repo_url = &Self::git_url(owner, repo);
+
+        let branch = match branch {
+            Some(branch) => branch,
+            None => &git::find_default_branch(repo_url)?,
+        };
+
         let rev = match revision {
             Some(rev) => rev,
-            None => &git::find_newest_revision(&Self::git_url(owner, repo), branch)?.to_string(),
+            None => &git::find_newest_revision(repo_url, branch)?.to_string(),
         };
         log::info!("Locked revision: {rev}");
 
