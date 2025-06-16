@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.0 (unreleased)
+## 0.8.0
 
 - Fixed `update --commit` when supplying a directory via `-d`.
 - Removed the need to provide a branch when adding a new source. When no
