@@ -1014,7 +1014,7 @@ dependencies = [
 [[package]]
 name = "nix-compat"
 version = "0.1.0"
-source = "git+https://git.snix.dev/snix/snix#afec95e269e2d59e10fb205eb793d7261b638dc2"
+source = "git+https://git.snix.dev/snix/snix?rev=3045c52230dc533b5939f830b8a5921eb9c63fca#3045c52230dc533b5939f830b8a5921eb9c63fca"
 dependencies = [
  "bitflags",
  "bstr",
