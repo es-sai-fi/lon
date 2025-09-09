@@ -14,7 +14,7 @@ use crate::{
     init::{Convertible, niv, npins},
     lock::Lock,
     lon_nix::LonNix,
-    sources::{GitHubSource, GitSource, Source, Sources},
+    sources::{GitHubSource, GitSource, Source, Sources, TarballSource, UpdateSummary},
 };
 
 /// The default log level.
@@ -97,6 +97,10 @@ enum AddCommands {
     /// It's fetched as a tarball which is more efficient than checking out the
     /// repository.
     GitHub(AddGitHubArgs),
+    /// Add a github source
+    ///
+    /// It tries to use the immutable tarbal protocol if available
+    Tarball(AddTarballArgs),
 }
 
 #[derive(Args)]
@@ -132,6 +136,17 @@ struct AddGitHubArgs {
     /// Revision to lock
     #[arg(short, long)]
     revision: Option<String>,
+    /// Freeze the source
+    #[arg(long, default_value_t = false)]
+    frozen: bool,
+}
+
+#[derive(Args)]
+struct AddTarballArgs {
+    /// Name of the source
+    name: String,
+    /// URL to the tarball
+    url: String,
     /// Freeze the source
     #[arg(long, default_value_t = false)]
     frozen: bool,
@@ -218,6 +233,7 @@ impl Commands {
             Self::Add { commands } => match commands {
                 AddCommands::Git(args) => add_git(directory, &args),
                 AddCommands::GitHub(args) => add_github(directory, &args),
+                AddCommands::Tarball(args) => add_tarball(directory, &args),
             },
             Self::Update(args) => update(directory, &args),
             Self::Modify(args) => modify(directory, &args),
@@ -321,6 +337,24 @@ fn add_github(directory: impl AsRef<Path>, args: &AddGitHubArgs) -> Result<()> {
     )?;
 
     sources.add(&name, Source::GitHub(source));
+
+    sources.write(&directory)?;
+    LonNix::update(&directory)?;
+
+    Ok(())
+}
+
+fn add_tarball(directory: impl AsRef<Path>, args: &AddTarballArgs) -> Result<()> {
+    let mut sources = Sources::read(&directory)?;
+    if sources.contains(&args.name) {
+        bail!("Source {} already exists", args.name);
+    }
+
+    log::info!("Adding {}...", args.name);
+
+    let source = TarballSource::new(&args.url, args.frozen)?;
+
+    sources.add(&args.name, Source::Tarball(source));
 
     sources.write(&directory)?;
     LonNix::update(&directory)?;
@@ -500,9 +534,12 @@ fn bot_fallible(directory: impl AsRef<Path>, forge: &impl Forge, base_ref: &str)
             continue;
         };
 
-        if list_commits > 0 {
-            let rev_list = source.rev_list(&summary, list_commits)?;
-            summary.add_rev_list(rev_list);
+        if let UpdateSummary::Rev(ref mut summary) = summary {
+            if list_commits > 0 {
+                if let Some(rev_list) = source.rev_list(summary, list_commits)? {
+                    summary.add_rev_list(rev_list);
+                }
+            }
         }
 
         let mut commit_message = CommitMessage::new();

@@ -282,7 +282,7 @@ pub fn rev_list(
     old_revision: &str,
     new_revision: &str,
     num_commits: usize,
-) -> Result<RevList> {
+) -> Result<Option<RevList>> {
     let tmp_dir = TempDir::new()?;
     let mut output: Output;
 
@@ -386,7 +386,7 @@ pub fn rev_list(
 
     let s = String::from_utf8_lossy(&output.stdout);
 
-    Ok(RevList::from_git_output(s.trim_end()))
+    Ok(Some(RevList::from_git_output(s.trim_end())))
 }
 
 /// Add files to git staging.

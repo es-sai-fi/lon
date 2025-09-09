@@ -13,6 +13,7 @@ pub struct Lock {
 pub enum Source {
     Git(GitSource),
     GitHub(GitHubSource),
+    Tarball(TarballSource),
 }
 
 /// This type indicates what fetcher to use to download this source.
@@ -52,6 +53,20 @@ pub struct GitHubSource {
     pub repo: String,
     pub branch: String,
     pub revision: String,
+    pub url: String,
+    pub hash: NixHash,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TarballSource {
+    pub fetch_type: FetchType,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub frozen: bool,
+
+    pub origin: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
     pub url: String,
     pub hash: NixHash,
 }

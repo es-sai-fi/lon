@@ -1,4 +1,4 @@
-use crate::sources::UpdateSummary;
+use crate::sources::{RevisionUpdate, UpdateSummary};
 
 use std::fmt::{self, Write};
 
@@ -27,23 +27,39 @@ impl CommitMessage {
             let summary = &self.updates[0].1;
 
             writeln!(&mut commit_message)?;
-            writeln!(&mut commit_message, "  {}", summary.old_revision)?;
-            writeln!(&mut commit_message, "→ {}", summary.new_revision)?;
+            match summary {
+                UpdateSummary::Rev(summary) => {
+                    writeln!(&mut commit_message, "  {}", summary.old_revision)?;
+                    writeln!(&mut commit_message, "→ {}", summary.new_revision)?;
 
-            if let Some(rev_list_overview) = Self::rev_list_overview(summary, 0) {
-                writeln!(&mut commit_message)?;
-                writeln!(&mut commit_message, "{rev_list_overview}")?;
+                    if let Some(rev_list_overview) = Self::rev_list_overview(summary, 0) {
+                        writeln!(&mut commit_message)?;
+                        writeln!(&mut commit_message, "{rev_list_overview}")?;
+                    }
+                }
+                UpdateSummary::Url(summary) => {
+                    writeln!(&mut commit_message, "  {}", summary.old_url)?;
+                    writeln!(&mut commit_message, "→ {}", summary.new_url)?;
+                }
             }
         } else {
             for (name, summary) in &self.updates {
                 writeln!(&mut commit_message)?;
                 writeln!(&mut commit_message, "• {name}:")?;
-                writeln!(&mut commit_message, "    {}", summary.old_revision)?;
-                writeln!(&mut commit_message, "  → {}", summary.new_revision)?;
+                match summary {
+                    UpdateSummary::Rev(summary) => {
+                        writeln!(&mut commit_message, "    {}", summary.old_revision)?;
+                        writeln!(&mut commit_message, "  → {}", summary.new_revision)?;
 
-                if let Some(rev_list_overview) = Self::rev_list_overview(summary, 2) {
-                    writeln!(&mut commit_message)?;
-                    writeln!(&mut commit_message, "{rev_list_overview}")?;
+                        if let Some(rev_list_overview) = Self::rev_list_overview(summary, 2) {
+                            writeln!(&mut commit_message)?;
+                            writeln!(&mut commit_message, "{rev_list_overview}")?;
+                        }
+                    }
+                    UpdateSummary::Url(summary) => {
+                        writeln!(&mut commit_message, "    {}", summary.old_url)?;
+                        writeln!(&mut commit_message, "  → {}", summary.new_url)?;
+                    }
                 }
             }
         }
@@ -53,7 +69,7 @@ impl CommitMessage {
     /// Construct the overview of the rev list from a summary.
     ///
     /// Adds whitespace according to the ident argument.
-    fn rev_list_overview(summary: &UpdateSummary, indent: usize) -> Option<String> {
+    fn rev_list_overview(summary: &RevisionUpdate, indent: usize) -> Option<String> {
         summary.rev_list.as_ref().map(|revs| {
             let prefix = " ".repeat(indent);
             let revs = revs.revs();
@@ -94,17 +110,20 @@ mod tests {
     use expect_test::expect;
     use indoc::indoc;
 
-    use crate::git::{Commit, RevList, Revision};
+    use crate::{
+        git::{Commit, RevList, Revision},
+        sources::RevisionUpdate,
+    };
 
     fn summary_1() -> UpdateSummary {
-        UpdateSummary::new(
+        UpdateSummary::from_revs(
             Revision::new("043344a1c19619435e2b79cd42de6592308af0aa"),
             Revision::new("21386f9d14831b594048e1e4340ac7a300e312d6"),
         )
     }
 
     fn summary_2() -> UpdateSummary {
-        UpdateSummary::new(
+        UpdateSummary::from_revs(
             Revision::new("ad3bc97747c651e23fbc12c70a5849d3d8e9fdf4"),
             Revision::new("75962bcd89dcccc9fe125c9ab46377d6cd1ddb00"),
         )
@@ -112,7 +131,7 @@ mod tests {
 
     /// Summary with a rev list from git commandline
     fn summary_rev_list_1() -> UpdateSummary {
-        let mut summary = UpdateSummary::new(
+        let mut summary = RevisionUpdate::new(
             Revision::new("043344a1c19619435e2b79cd42de6592308af0aa"),
             Revision::new("21386f9d14831b594048e1e4340ac7a300e312d6"),
         );
@@ -124,12 +143,12 @@ mod tests {
         "};
         let rev_list = RevList::from_git_output(rev_list_git_output);
         summary.add_rev_list(rev_list);
-        summary
+        UpdateSummary::Rev(summary)
     }
 
     /// Summary with a rev list from GitHub
     fn summary_rev_list_2() -> UpdateSummary {
-        let mut summary = UpdateSummary::new(
+        let mut summary = RevisionUpdate::new(
             Revision::new("6c1da4c913f0edf2835c3cc47c3889c36c05e6ca"),
             Revision::new("629f1e13eb7d09738538ba1b3c2ce35d9c1bef3e"),
         );
@@ -148,7 +167,7 @@ mod tests {
             Commit::from_str("6232894", ".gitignore: ignore .env"),
         ]);
         summary.add_rev_list(rev_list);
-        summary
+        UpdateSummary::Rev(summary)
     }
 
     #[test]

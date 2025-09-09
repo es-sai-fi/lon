@@ -143,7 +143,7 @@ impl GitHubRepoApi {
         old_revision: &str,
         new_revision: &str,
         num_commits: usize,
-    ) -> Result<RevList> {
+    ) -> Result<Option<RevList>> {
         let url = format!(
             "{}/compare/{old_revision}...{new_revision}",
             self.repo_api_url
@@ -171,7 +171,7 @@ impl GitHubRepoApi {
             .take(num_commits)
             .map(|c| git::Commit::from_str(&c.sha, &c.commit.message));
 
-        Ok(RevList::from_commits(commits))
+        Ok(Some(RevList::from_commits(commits)))
     }
 
     pub fn open_pull_request(
