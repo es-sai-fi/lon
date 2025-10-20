@@ -1,7 +1,15 @@
 use std::{collections::BTreeMap, path::Path};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use nix_compat::nixhash::NixHash;
+use regex::Regex;
+use reqwest::{
+    Url,
+    blocking::Client,
+    header::{LINK, LOCATION},
+    redirect::Policy,
+};
+use serde::Deserialize;
 
 use crate::{
     git::{self, RevList, Revision},
@@ -15,14 +23,38 @@ const GITHUB_URL: &str = "https://github.com";
 ///
 /// Represents an update of a single source.
 #[derive(Clone)]
-pub struct UpdateSummary {
+pub enum UpdateSummary {
+    Rev(RevisionUpdate),
+    Url(UrlUpdate),
+}
+
+impl UpdateSummary {
+    pub fn from_revs(old_revision: Revision, new_revision: Revision) -> Self {
+        Self::Rev(RevisionUpdate::new(old_revision, new_revision))
+    }
+
+    pub fn from_urls(old_url: Url, new_url: Url) -> Self {
+        Self::Url(UrlUpdate::new(old_url, new_url))
+    }
+}
+
+/// Represents an update of a versioned source.
+#[derive(Clone)]
+pub struct RevisionUpdate {
     pub old_revision: Revision,
     pub new_revision: Revision,
     pub rev_list: Option<RevList>,
 }
 
-impl UpdateSummary {
-    /// Create a new update summary.
+/// Represents an update of a url source
+#[derive(Clone)]
+pub struct UrlUpdate {
+    pub old_url: Url,
+    pub new_url: Url,
+}
+
+impl RevisionUpdate {
+    /// Create a new revision update summary.
     ///
     /// Tries to determine the revision
     pub fn new(old_revision: Revision, new_revision: Revision) -> Self {
@@ -35,6 +67,13 @@ impl UpdateSummary {
 
     pub fn add_rev_list(&mut self, rev_list: RevList) {
         self.rev_list = Some(rev_list);
+    }
+}
+
+impl UrlUpdate {
+    /// Create a new revision update summary.
+    pub fn new(old_url: Url, new_url: Url) -> Self {
+        Self { old_url, new_url }
     }
 }
 
@@ -92,6 +131,7 @@ impl Sources {
 pub enum Source {
     Git(GitSource),
     GitHub(GitHubSource),
+    Tarball(TarballSource),
 }
 
 impl Source {
@@ -99,6 +139,7 @@ impl Source {
         match self {
             Self::Git(s) => s.update(),
             Self::GitHub(s) => s.update(),
+            Self::Tarball(s) => s.update(),
         }
     }
 
@@ -106,6 +147,7 @@ impl Source {
         match self {
             Self::Git(s) => s.modify(branch, revision),
             Self::GitHub(s) => s.modify(branch, revision),
+            Self::Tarball(_) => Ok(()),
         }
     }
 
@@ -113,6 +155,7 @@ impl Source {
         match self {
             Self::Git(s) => s.frozen = true,
             Self::GitHub(s) => s.frozen = true,
+            Self::Tarball(s) => s.frozen = true,
         }
     }
 
@@ -120,6 +163,7 @@ impl Source {
         match self {
             Self::Git(s) => s.frozen = false,
             Self::GitHub(s) => s.frozen = false,
+            Self::Tarball(s) => s.frozen = false,
         }
     }
 
@@ -128,15 +172,16 @@ impl Source {
         match self {
             Self::Git(s) => s.frozen,
             Self::GitHub(s) => s.frozen,
+            Self::Tarball(s) => s.frozen,
         }
     }
 
-    pub fn rev_list(&self, summary: &UpdateSummary, num_commits: usize) -> Result<RevList> {
+    pub fn rev_list(&self, update: &RevisionUpdate, num_commits: usize) -> Result<Option<RevList>> {
         match self {
             Self::Git(s) => git::rev_list(
                 &s.url,
-                summary.old_revision.as_str(),
-                summary.new_revision.as_str(),
+                update.old_revision.as_str(),
+                update.new_revision.as_str(),
                 num_commits,
             ),
             Self::GitHub(s) => {
@@ -144,11 +189,12 @@ impl Source {
                     GitHubRepoApi::builder(&format!("{}/{}", s.owner, s.repo)).build()?;
 
                 github_repo_api.compare_commits(
-                    summary.old_revision.as_str(),
-                    summary.new_revision.as_str(),
+                    update.old_revision.as_str(),
+                    update.new_revision.as_str(),
                     num_commits,
                 )
             }
+            Self::Tarball(_) => Ok(None),
         }
     }
 }
@@ -220,7 +266,10 @@ impl GitSource {
         }
         log::info!("Updated revision: {current_revision} → {newest_revision}");
         self.lock(&newest_revision)?;
-        Ok(Some(UpdateSummary::new(current_revision, newest_revision)))
+        Ok(Some(UpdateSummary::from_revs(
+            current_revision,
+            newest_revision,
+        )))
     }
 
     /// Lock the source to a new revision.
@@ -340,7 +389,10 @@ impl GitHubSource {
 
         log::info!("Updated revision: {current_revision} → {newest_revision}");
         self.lock(&newest_revision)?;
-        Ok(Some(UpdateSummary::new(current_revision, newest_revision)))
+        Ok(Some(UpdateSummary::from_revs(
+            current_revision,
+            newest_revision,
+        )))
     }
 
     /// Lock the source to a specific revision.
@@ -396,6 +448,178 @@ impl GitHubSource {
     }
 }
 
+#[derive(Clone)]
+pub struct TarballSource {
+    origin: String,
+    url: String,
+    hash: NixHash,
+    revision: Option<String>,
+
+    frozen: bool,
+}
+
+#[derive(Clone)]
+pub struct TarballFlakeRef {
+    url: String,
+
+    tarball_ref: TarballRef,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TarballRef {
+    nar_hash: Option<NixHash>,
+    rev: Option<String>,
+}
+
+impl TarballSource {
+    pub fn new(url: &str, frozen: bool) -> Result<Self> {
+        let origin = url.to_string();
+
+        let flake_ref = Self::resolve_flakeref_origin(&origin)?;
+
+        let hash = Self::compute_hash(&flake_ref)?;
+
+        log::info!("Locked hash: {hash}");
+
+        Ok(Self {
+            origin,
+            revision: flake_ref.tarball_ref.rev,
+            url: flake_ref.url,
+            hash,
+            frozen,
+        })
+    }
+
+    /// Update the source.
+    fn update(&mut self) -> Result<Option<UpdateSummary>> {
+        if self.frozen {
+            log::info!("Source is frozen");
+            return Ok(None);
+        }
+
+        // Recover the flakeref information
+        let flake_ref = Self::resolve_flakeref_origin(&self.origin)?;
+
+        // If the tarball has a revision associated to it, compare with what we just got
+        if let (Some(rev), Some(new_rev)) =
+            (self.revision.clone(), flake_ref.tarball_ref.rev.clone())
+        {
+            if rev == new_rev {
+                log::info!("Already up to date");
+                return Ok(None);
+            }
+
+            // Update the source
+            let hash = Self::compute_hash(&flake_ref)?;
+
+            self.revision = Some(new_rev.clone());
+            self.hash = hash;
+            self.url.clone_from(&flake_ref.url);
+
+            log::info!("Updated revision: {rev} → {new_rev}");
+
+            Ok(Some(UpdateSummary::from_revs(
+                Revision::new(&rev),
+                Revision::new(&new_rev),
+            )))
+        } else {
+            // Missing revision information, look for a url difference
+            if self.url == flake_ref.url {
+                log::info!("Already up to date");
+                return Ok(None);
+            }
+
+            let hash = Self::compute_hash(&flake_ref)?;
+
+            let old_url = Url::parse(&self.url)?;
+            let new_url = Url::parse(&flake_ref.url)?;
+
+            self.revision = flake_ref.tarball_ref.rev.clone();
+            self.hash = hash;
+            self.url = flake_ref.url;
+
+            log::info!("Updated url: {old_url} → {new_url}");
+
+            Ok(Some(UpdateSummary::from_urls(old_url, new_url)))
+        }
+    }
+
+    /// Compute the hash for this source type.
+    fn compute_hash(flake_ref: &TarballFlakeRef) -> Result<NixHash> {
+        let url = &flake_ref.url;
+
+        let hash = nix::prefetch_tarball(url)
+            .with_context(|| format!("Failed to compute hash for {url}"))?;
+
+        // Check that the promised hash is the one we get
+        if let Some(ref locked_hash) = flake_ref.tarball_ref.nar_hash {
+            if *locked_hash != hash {
+                log::warn!("Hash mismatch: expected {locked_hash} but found {hash}");
+            }
+        }
+
+        Ok(hash)
+    }
+
+    /// Return the target url of the tarball, it is either the locked url, according to the
+    /// Lockable HTTP Tarball Protocol, or the origin url
+    fn resolve_flakeref_origin(origin: &str) -> Result<TarballFlakeRef> {
+        let client = Client::builder()
+            .user_agent("Lon")
+            // Do not follow redirect responses, as it will lose the Link header
+            .redirect(Policy::none())
+            .build()
+            .context("Failed to build the HTTP client")?;
+
+        let mut target = origin;
+        let mut res;
+
+        let re = Regex::new(r#"^<(?<flakeref>.*)>; rel="immutable"$"#)?;
+
+        loop {
+            res = client
+                .head(target)
+                .send()
+                .context(format!("Failed to send HEAD request to {origin}"))?;
+
+            if let Some(link) = res.headers().get(LINK) {
+                // Parse the Link header value
+                let link = link.to_str().expect("Failed to read the Link header value");
+
+                if let Some(url) = re.captures(link).map(|m| m["flakeref"].to_string()) {
+                    let data =
+                        Url::parse(&url).context(format!("Failed to parse flakeref: {url}"))?;
+                    let tarball_ref: TarballRef = serde_qs::from_str(data.query().unwrap_or(""))?;
+
+                    return Ok(TarballFlakeRef { url, tarball_ref });
+                }
+
+                bail!("Failed to recover the flakeref of the tarball in the link: {link}")
+            }
+
+            if res.status().is_redirection() {
+                let error = &format!(
+                    "No location given in the redirection response from {}",
+                    res.url()
+                );
+
+                target = res
+                    .headers()
+                    .get(LOCATION)
+                    .expect(error)
+                    .to_str()
+                    .expect(error);
+            } else {
+                // We exhausted the redirection chain without finding a link header
+                bail!(
+                    "Link header not found, this source does not implement the Lockable HTTP Tarball Protocol"
+                )
+            }
+        }
+    }
+}
+
 // Boilerplate to convert between the internal representation (Sources) and the external lock file
 // representation.
 //
@@ -410,6 +634,7 @@ impl From<lock::Lock> for Sources {
     }
 }
 
+// V1 conversion
 impl From<lock::v1::Lock> for Sources {
     fn from(value: lock::v1::Lock) -> Self {
         let map = value
@@ -426,6 +651,7 @@ impl From<lock::v1::Source> for Source {
         match value {
             lock::v1::Source::Git(s) => Self::Git(s.into()),
             lock::v1::Source::GitHub(s) => Self::GitHub(s.into()),
+            lock::v1::Source::Tarball(s) => Self::Tarball(s.into()),
         }
     }
 }
@@ -458,6 +684,18 @@ impl From<lock::v1::GitHubSource> for GitHubSource {
     }
 }
 
+impl From<lock::v1::TarballSource> for TarballSource {
+    fn from(value: lock::v1::TarballSource) -> Self {
+        Self {
+            frozen: value.frozen,
+            origin: value.origin,
+            revision: value.revision,
+            url: value.url,
+            hash: value.hash,
+        }
+    }
+}
+
 impl From<Sources> for lock::v1::Lock {
     fn from(value: Sources) -> Self {
         let sources = value
@@ -474,6 +712,7 @@ impl From<Source> for lock::v1::Source {
         match value {
             Source::Git(s) => Self::Git(s.into()),
             Source::GitHub(s) => Self::GitHub(s.into()),
+            Source::Tarball(s) => Self::Tarball(s.into()),
         }
     }
 }
@@ -504,6 +743,19 @@ impl From<GitHubSource> for lock::v1::GitHubSource {
             url: value.url,
             hash: value.hash,
             frozen: value.frozen,
+        }
+    }
+}
+
+impl From<TarballSource> for lock::v1::TarballSource {
+    fn from(value: TarballSource) -> Self {
+        Self {
+            fetch_type: lock::v1::FetchType::Tarball,
+            frozen: value.frozen,
+            origin: value.origin,
+            revision: value.revision,
+            url: value.url,
+            hash: value.hash,
         }
     }
 }
