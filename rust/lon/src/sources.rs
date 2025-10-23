@@ -33,7 +33,7 @@ impl UpdateSummary {
         Self::Rev(RevisionUpdate::new(old_revision, new_revision))
     }
 
-    pub fn from_urls(old_url: Url, new_url: Url) -> Self {
+    pub fn from_urls(old_url: &str, new_url: &str) -> Self {
         Self::Url(UrlUpdate::new(old_url, new_url))
     }
 }
@@ -49,8 +49,8 @@ pub struct RevisionUpdate {
 /// Represents an update of a url source
 #[derive(Clone)]
 pub struct UrlUpdate {
-    pub old_url: Url,
-    pub new_url: Url,
+    pub old_url: String,
+    pub new_url: String,
 }
 
 impl RevisionUpdate {
@@ -72,8 +72,11 @@ impl RevisionUpdate {
 
 impl UrlUpdate {
     /// Create a new revision update summary.
-    pub fn new(old_url: Url, new_url: Url) -> Self {
-        Self { old_url, new_url }
+    pub fn new(old_url: &str, new_url: &str) -> Self {
+        Self {
+            old_url: old_url.to_string(),
+            new_url: new_url.to_string(),
+        }
     }
 }
 
@@ -143,11 +146,16 @@ impl Source {
         }
     }
 
-    pub fn modify(&mut self, branch: Option<&String>, revision: Option<&String>) -> Result<()> {
+    pub fn modify(
+        &mut self,
+        branch: Option<&String>,
+        revision: Option<&String>,
+        url: Option<&String>,
+    ) -> Result<()> {
         match self {
-            Self::Git(s) => s.modify(branch, revision),
-            Self::GitHub(s) => s.modify(branch, revision),
-            Self::Tarball(_) => Ok(()),
+            Self::Git(s) => s.modify(branch, revision, url),
+            Self::GitHub(s) => s.modify(branch, revision, url),
+            Self::Tarball(s) => s.modify(branch, revision, url),
         }
     }
 
@@ -291,7 +299,12 @@ impl GitSource {
     }
 
     /// Modify the source by changing its branch and/or its revision.
-    fn modify(&mut self, branch: Option<&String>, revision: Option<&String>) -> Result<()> {
+    fn modify(
+        &mut self,
+        branch: Option<&String>,
+        revision: Option<&String>,
+        url: Option<&String>,
+    ) -> Result<()> {
         if let Some(branch) = branch {
             if self.branch == *branch {
                 log::info!("Branch is already {branch}");
@@ -311,10 +324,13 @@ impl GitSource {
                 self.lock(&Revision::new(revision))?;
             }
         }
+        if url.is_some() {
+            log::warn!("Cannot update URL of git sources");
+        }
         Ok(())
     }
 
-    /// Computing the hash for this source type.
+    /// Compute the hash for this source type.
     fn compute_hash(url: &str, revision: &str, submodules: bool) -> Result<NixHash> {
         nix::prefetch_git(url, revision, submodules)
             .with_context(|| format!("Failed to compute hash for {url}@{revision}"))
@@ -409,7 +425,12 @@ impl GitHubSource {
     }
 
     /// Modify the source by changing its branch and/or its revision.
-    fn modify(&mut self, branch: Option<&String>, revision: Option<&String>) -> Result<()> {
+    fn modify(
+        &mut self,
+        branch: Option<&String>,
+        revision: Option<&String>,
+        url: Option<&String>,
+    ) -> Result<()> {
         if let Some(branch) = branch {
             if self.branch == *branch {
                 log::info!("Branch is already {branch}");
@@ -428,6 +449,9 @@ impl GitHubSource {
                 log::info!("Changed revision: {} → {}", self.revision, revision);
                 self.lock(&Revision::new(revision))?;
             }
+        }
+        if url.is_some() {
+            log::warn!("Cannot update URL of GitHub sources");
         }
         Ok(())
     }
@@ -450,7 +474,10 @@ impl GitHubSource {
 
 #[derive(Clone)]
 pub struct TarballSource {
-    origin: String,
+    /// The URL that points to the latest version.
+    ///
+    /// The `url` field is resolved from the LINK tag returned by URL from the origin field.
+    origin: Option<String>,
     url: String,
     hash: NixHash,
     revision: Option<String>,
@@ -459,7 +486,7 @@ pub struct TarballSource {
 }
 
 #[derive(Clone)]
-pub struct TarballFlakeRef {
+struct TarballFlakeRef {
     url: String,
 
     tarball_ref: TarballRef,
@@ -474,21 +501,47 @@ struct TarballRef {
 
 impl TarballSource {
     pub fn new(url: &str, frozen: bool) -> Result<Self> {
-        let origin = url.to_string();
+        let flake_ref_result = Self::resolve_flakeref_origin(url);
+        if let Err(ref e) = flake_ref_result {
+            log::debug!("{e}");
+        }
+        let source = if let Ok(flake_ref) = flake_ref_result {
+            log::info!("Locked immutable URL: {}", flake_ref.url);
+            if let Some(ref rev) = flake_ref.tarball_ref.rev {
+                log::info!("Locked revision: {rev}");
+            }
+            let hash = Self::compute_hash(&flake_ref.url)?;
+            // Check that the promised hash is the one we get
+            if let Some(ref expected_hash) = flake_ref.tarball_ref.nar_hash {
+                if *expected_hash != hash {
+                    bail!("Hash mismatch: expected {expected_hash} but found {hash}");
+                }
+            }
+            log::info!("Locked hash: {hash}");
 
-        let flake_ref = Self::resolve_flakeref_origin(&origin)?;
+            Self {
+                origin: Some(url.to_string()),
+                revision: flake_ref.tarball_ref.rev,
+                url: flake_ref.url,
+                hash,
+                frozen,
+            }
+        } else {
+            log::info!("Source doesn't implement the Lockable HTTP Tarball Protocol");
+            log::info!("Locked original URL: {url}");
+            let hash = Self::compute_hash(url)?;
+            log::info!("Locked hash: {hash}");
 
-        let hash = Self::compute_hash(&flake_ref)?;
+            Self {
+                origin: None,
+                revision: None,
+                url: url.to_string(),
+                hash,
+                frozen,
+            }
+        };
 
-        log::info!("Locked hash: {hash}");
-
-        Ok(Self {
-            origin,
-            revision: flake_ref.tarball_ref.rev,
-            url: flake_ref.url,
-            hash,
-            frozen,
-        })
+        Ok(source)
     }
 
     /// Update the source.
@@ -498,68 +551,87 @@ impl TarballSource {
             return Ok(None);
         }
 
-        // Recover the flakeref information
-        let flake_ref = Self::resolve_flakeref_origin(&self.origin)?;
+        let Some(ref origin) = self.origin else {
+            log::info!("Source is not updateable");
+            return Ok(None);
+        };
 
-        // If the tarball has a revision associated to it, compare with what we just got
-        if let (Some(rev), Some(new_rev)) =
+        // Recover the flakeref information
+        let flake_ref = Self::resolve_flakeref_origin(origin)?;
+
+        if self.url == flake_ref.url {
+            log::info!("Already up to date");
+            return Ok(None);
+        }
+
+        let current_url = self.url.clone();
+        let newest_url = &flake_ref.url;
+        log::info!("Updated URL: {current_url} → {newest_url}");
+
+        // If the tarball has a revision associated to it use that in the update summary.
+        let summary = if let (Some(rev), Some(new_rev)) =
             (self.revision.clone(), flake_ref.tarball_ref.rev.clone())
         {
-            if rev == new_rev {
-                log::info!("Already up to date");
-                return Ok(None);
-            }
-
-            // Update the source
-            let hash = Self::compute_hash(&flake_ref)?;
-
-            self.revision = Some(new_rev.clone());
-            self.hash = hash;
-            self.url.clone_from(&flake_ref.url);
-
             log::info!("Updated revision: {rev} → {new_rev}");
+            self.revision = Some(new_rev.clone());
 
-            Ok(Some(UpdateSummary::from_revs(
-                Revision::new(&rev),
-                Revision::new(&new_rev),
-            )))
+            UpdateSummary::from_revs(Revision::new(&rev), Revision::new(&new_rev))
         } else {
-            // Missing revision information, look for a url difference
-            if self.url == flake_ref.url {
-                log::info!("Already up to date");
-                return Ok(None);
+            if let Some(new_rev) = flake_ref.tarball_ref.rev {
+                log::info!("Locked revision: {new_rev}");
+                self.revision = Some(new_rev.clone());
             }
 
-            let hash = Self::compute_hash(&flake_ref)?;
+            UpdateSummary::from_urls(&current_url, newest_url)
+        };
 
-            let old_url = Url::parse(&self.url)?;
-            let new_url = Url::parse(&flake_ref.url)?;
+        self.lock(&flake_ref.url)?;
 
-            self.revision = flake_ref.tarball_ref.rev.clone();
-            self.hash = hash;
-            self.url = flake_ref.url;
+        Ok(Some(summary))
+    }
 
-            log::info!("Updated url: {old_url} → {new_url}");
+    /// Lock the source to a specific URL.
+    ///
+    /// In this case this means that the hash, and URL is updated.
+    fn lock(&mut self, url: &str) -> Result<()> {
+        let new_hash = Self::compute_hash(url)?;
+        log::info!("Updated hash: {} → {}", self.hash, new_hash);
+        self.hash = new_hash;
+        self.url = url.to_string();
+        Ok(())
+    }
 
-            Ok(Some(UpdateSummary::from_urls(old_url, new_url)))
+    /// Modify the source by changing its branch and/or its revision.
+    fn modify(
+        &mut self,
+        branch: Option<&String>,
+        revision: Option<&String>,
+        url: Option<&String>,
+    ) -> Result<()> {
+        if branch.is_some() {
+            log::warn!("Cannot update branch of tarball sources");
         }
+        if revision.is_some() {
+            log::warn!("Cannot update revision of tarball source");
+        }
+        if self.origin.is_some() {
+            log::warn!("Cannot update URL of this source because it's lockable");
+            return Ok(());
+        }
+        if let Some(url) = url {
+            if self.url == *url {
+                log::info!("URL is already {url}");
+            } else {
+                log::info!("Changed URL: {} → {}", self.url, url);
+                self.lock(url)?;
+            }
+        }
+        Ok(())
     }
 
     /// Compute the hash for this source type.
-    fn compute_hash(flake_ref: &TarballFlakeRef) -> Result<NixHash> {
-        let url = &flake_ref.url;
-
-        let hash = nix::prefetch_tarball(url)
-            .with_context(|| format!("Failed to compute hash for {url}"))?;
-
-        // Check that the promised hash is the one we get
-        if let Some(ref locked_hash) = flake_ref.tarball_ref.nar_hash {
-            if *locked_hash != hash {
-                log::warn!("Hash mismatch: expected {locked_hash} but found {hash}");
-            }
-        }
-
-        Ok(hash)
+    fn compute_hash(url: &str) -> Result<NixHash> {
+        nix::prefetch_tarball(url).with_context(|| format!("Failed to compute hash for {url}"))
     }
 
     /// Return the target url of the tarball, it is either the locked url, according to the

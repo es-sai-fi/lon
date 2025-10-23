@@ -173,6 +173,9 @@ struct ModifyArgs {
     /// Revision to lock
     #[arg(short, long)]
     revision: Option<String>,
+    /// URL to change
+    #[arg(short, long)]
+    url: Option<String>,
 }
 
 #[derive(Args)]
@@ -418,7 +421,11 @@ fn modify(directory: impl AsRef<Path>, args: &ModifyArgs) -> Result<()> {
 
     log::info!("Modifying {}...", args.name);
 
-    source.modify(args.branch.as_ref(), args.revision.as_ref())?;
+    source.modify(
+        args.branch.as_ref(),
+        args.revision.as_ref(),
+        args.url.as_ref(),
+    )?;
 
     sources.write(&directory)?;
     LonNix::update(&directory)?;

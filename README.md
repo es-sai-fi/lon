@@ -11,6 +11,7 @@ Lock & update Nix dependencies.
   development
 - Leverages modern Nix features (concretely this means Nix >= 2.4 is required)
 - Built-in bot to automate dependency updates for GitHub, GitLab, and Forgejo
+- Supports the [Lockable HTTP Tarball Protocol](https://nix.dev/manual/nix/latest/protocols/tarball-fetcher)
 
 ## Installation
 
@@ -79,15 +80,28 @@ Locked hash: sha256-8pTC0OIYD47alDVf2mwSytwARCwoH6IqnUfpyshyQX8=
 Add a new Git source:
 
 ```console
-$ lon add git lix https://git.lix.systems/lix-project/lix.git main
-Adding lix...
-Locked revision: a510d1748416ff29b1ed3cab92ac0ad943b6e590
-Locked hash: sha256-IjSu5PnS+LFqHfJgueDXrqSBd9/j9GxAbrFK8F1/Z5Y=
-Locked lastModified: 1724864109
+$ lon add git snix https://git.snix.dev/snix/snix.git canon
+Adding snix...
+Locked revision: e33040a3e1a500e73dd8a4c2b9e793d7cb85384f
+Locked hash: sha256-TpWEIhAgzGIupKARl+a3btrBaV9wQGYyxzN42Cnmu14=
+Locked lastModified: 1761157523
 ```
 
 Git sources also support fetching submodules. Enable it by supplying
 `--submodules` to Lon.
+
+Add a new [(Lockable)](https://nix.dev/manual/nix/latest/protocols/tarball-fetcher) Tarball source:
+
+```console
+Adding lix...
+Locked immutable URL: https://git.lix.systems/api/v1/repos/lix-project/lix/archive/18efc848fe7b79c84a2e4311ac9ce3492b7aaa82.tar.gz?rev=18efc848fe7b79c84a2e4311ac9ce3492b7aaa82
+Locked revision: 18efc848fe7b79c84a2e4311ac9ce3492b7aaa82
+Locked hash: sha256-B4TrQgd/3pm0SvnCkYkvLuldhrO+9QRB/mKa6JrItNo=
+```
+
+If the provided URL doesn't point to a lockable tarball, it pins the provided
+URL directly. You can change the URL of a non-lockable tarball by calling
+`lon modify $name --url $new_url`.
 
 You can now access these sources via `lon.nix`:
 
@@ -215,7 +229,7 @@ jobs:
 ```
 
 Note, however, that the pull requests opened via this actions will not trigger workflows
-due to how the the [automatic token](https://forgejo.org/docs/latest/user/actions/#automatic-token) is designed.
+due to how the [automatic token](https://forgejo.org/docs/latest/user/actions/#automatic-token) is designed.
 
 #### With an Access Token
 
@@ -260,7 +274,7 @@ The bot is configured exclusively via environment variables.
 - `LON_PUSH_URL`: The URL to use to push to the repository. This can be used to
   set a token in the URL. For GitLab, this is required.
 - `LON_LIST_COMMITS`: The number of commits to list in the commit message that
-  occured between the old revision and the updated revision. If this is unset,
+  occurred between the old revision and the updated revision. If this is unset,
   none are listed.
 
 #### GitLab Specific (Required)
