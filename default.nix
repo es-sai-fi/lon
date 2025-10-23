@@ -3,7 +3,7 @@
 }:
 let
   sources = import ./lon.nix;
-  pkgs = import sources.nixpkgs { };
+  pkgs = import sources.nixpkgs { inherit system; };
   lib = pkgs.lib;
 in
 rec {
@@ -16,9 +16,9 @@ rec {
       import ./nix/tests {
         inherit pkgs;
         extraBaseModules = {
-          lon-tests = ({
+          lon-tests = {
             environment.systemPackages = [ packages.lonTests ];
-          });
+          };
         };
       }
     );
