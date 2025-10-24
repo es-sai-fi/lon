@@ -7,9 +7,9 @@ let
   lib = pkgs.lib;
 in
 rec {
-  packages = import ./nix/packages { inherit pkgs; };
+  packages = lib.recurseIntoAttrs (import ./nix/packages { inherit pkgs; });
 
-  checks = {
+  checks = lib.recurseIntoAttrs {
     pre-commit = import ./nix/pre-commit.nix;
 
     tests = lib.recurseIntoAttrs (
