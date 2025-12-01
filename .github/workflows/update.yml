@@ -14,11 +14,8 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/checkout@5
-      - uses: DeterminateSystems/nix-installer-action@v20
-        with:
-          diagnostic-endpoint: ""
-          source-url: "https://install.lix.systems/lix/lix-installer-x86_64-linux"
+      - uses: actions/checkout@6
+      - uses: samueldr/lix-gha-installer-action@v2025-10-27
       - run: nix-build -A packages.lon
       - env:
           LON_TOKEN: ${{ secrets.GITHUB_TOKEN }}

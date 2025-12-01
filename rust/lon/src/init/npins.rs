@@ -79,7 +79,7 @@ pub enum Pin {
 impl LockFile {
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self> {
         let lock_json = std::fs::read_to_string(path.as_ref())
-            .with_context(|| format!("Failed to read {:?}", path.as_ref()))?;
+            .with_context(|| format!("Failed to read {}", path.as_ref().display()))?;
 
         serde_json::from_str(&lock_json).context("Failed to deserialize Npins lock file")
     }

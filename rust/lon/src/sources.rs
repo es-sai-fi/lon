@@ -512,10 +512,10 @@ impl TarballSource {
             }
             let hash = Self::compute_hash(&flake_ref.url)?;
             // Check that the promised hash is the one we get
-            if let Some(ref expected_hash) = flake_ref.tarball_ref.nar_hash {
-                if *expected_hash != hash {
-                    bail!("Hash mismatch: expected {expected_hash} but found {hash}");
-                }
+            if let Some(ref expected_hash) = flake_ref.tarball_ref.nar_hash
+                && *expected_hash != hash
+            {
+                bail!("Hash mismatch: expected {expected_hash} but found {hash}");
             }
             log::info!("Locked hash: {hash}");
 
