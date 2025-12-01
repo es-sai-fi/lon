@@ -34,14 +34,14 @@ impl Lock {
 
     pub fn from_file(path: impl AsRef<Path>) -> Result<Self> {
         let lock_json = std::fs::read_to_string(path.as_ref())
-            .with_context(|| format!("Failed to read {:?}", path.as_ref()))?;
+            .with_context(|| format!("Failed to read {}", path.as_ref().display()))?;
 
         serde_json::from_str(&lock_json).context("Failed to deserialize lock file")
     }
 
     pub fn to_file(&self, path: impl AsRef<Path>) -> Result<()> {
         let mut file = File::create(path.as_ref())
-            .with_context(|| format!("Failed to open {:?}", path.as_ref()))?;
+            .with_context(|| format!("Failed to open {}", path.as_ref().display()))?;
         serde_json::to_writer_pretty(&mut file, self).context("Failed to serialize lock file")?;
         file.write_all(b"\n")?;
         Ok(())

@@ -281,7 +281,7 @@ fn init(directory: impl AsRef<Path>, args: &InitArgs) -> Result<()> {
         bail!("No lock file type is provided");
     };
 
-    log::info!("Initializing lon.lock from {path:?}");
+    log::info!("Initializing lon.lock from {}", path.display());
 
     let sources = match lock_file_type {
         LockFileType::Niv => niv::LockFile::from_file(path)?.convert()?,
@@ -371,7 +371,7 @@ fn update(directory: impl AsRef<Path>, args: &UpdateArgs) -> Result<()> {
     let mut names = Vec::new();
 
     if let Some(ref name) = args.name {
-        names.push(name.to_string());
+        names.push(name.clone());
     } else {
         names.extend(sources.names().into_iter().map(ToString::to_string));
     }
@@ -541,12 +541,11 @@ fn bot_fallible(directory: impl AsRef<Path>, forge: &impl Forge, base_ref: &str)
             continue;
         };
 
-        if let UpdateSummary::Rev(ref mut summary) = summary {
-            if list_commits > 0 {
-                if let Some(rev_list) = source.rev_list(summary, list_commits)? {
-                    summary.add_rev_list(rev_list);
-                }
-            }
+        if let UpdateSummary::Rev(ref mut summary) = summary
+            && list_commits > 0
+            && let Some(rev_list) = source.rev_list(summary, list_commits)?
+        {
+            summary.add_rev_list(rev_list);
         }
 
         let mut commit_message = CommitMessage::new();

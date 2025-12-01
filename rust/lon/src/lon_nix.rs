@@ -44,8 +44,8 @@ impl LonNix {
 /// Hash a file with SHA256.
 fn hash_file(path: impl AsRef<Path>) -> Result<[u8; 32]> {
     let mut hasher = Sha256::new();
-    let mut file =
-        File::open(&path).with_context(|| format!("Failed to open: {:?}", path.as_ref()))?;
+    let mut file = File::open(&path)
+        .with_context(|| format!("Failed to open: {}", path.as_ref().display()))?;
     io::copy(&mut file, &mut hasher)?;
 
     let mut buffer = [0u8; 32];
